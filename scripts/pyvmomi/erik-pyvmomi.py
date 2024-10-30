@@ -24,7 +24,7 @@ def connect(settings):
     si= SmartConnect(host=settings["vcenter_host"], user=settings["user"], pwd=passwd, sslContext=s)
     return si
 
-def connectionInfo(si):
+def print_connection_info(si):
     currentSession = si.content.sessionManager.currentSession
     print ("\nAgent: " + currentSession.userAgent)
     print ("Username: " + currentSession.userName)
@@ -72,7 +72,7 @@ def get_folder(si, name_filter=None):
 def get_portgroups(si, name_filter=None):
     content = si.RetrieveContent()
     container = content.rootFolder  # starting point to look into
-    viewType = [vim.DistributedVirtualSwitch]  # object types to look for
+    viewType = [vim.Network]  # object types to look for
     recursive = True  # whether we should look into it recursively
     containerView = content.viewManager.CreateContainerView(container, viewType, recursive)
 
@@ -108,6 +108,33 @@ def tweak_vm(vm, cpu, ram):
     spec.numCPUs = cpu
     spec.memoryMB = ram
     # Apply the changes
+    task = vm.ReconfigVM_Task(spec)
+    task.info.state  # Optional: check the status of the task
+
+def change_vm_network(vm, new_nw):
+    nic = None
+    for device in vm.config.hardware.device:
+        if isinstance(device, vim.vm.device.VirtualEthernetCard):
+            nic = device
+            break
+
+    if nic is None:
+        raise Exception("No network adapter found")
+
+    # Create a VirtualDeviceConfigSpec to change the network
+    nic_spec = vim.vm.device.VirtualDeviceSpec()
+    nic_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.edit
+    nic_spec.device = nic
+
+
+
+    nic_spec.device.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
+    nic_spec.device.backing.network = new_nw
+    nic_spec.device.backing.deviceName = new_nw.name
+
+    # Apply the changes
+    spec = vim.vm.ConfigSpec()
+    spec.deviceChange = [nic_spec]
     task = vm.ReconfigVM_Task(spec)
     task.info.state  # Optional: check the status of the task
 
@@ -147,7 +174,7 @@ def create_linked_clone(content,parent_vm,clone_name):
 settings = get_json("settings.json")   
 si = connect(settings)
 content = si.content
-connectionInfo(si)
+print_connection_info(si)
 
 
 
@@ -236,6 +263,20 @@ while True:
             for vm in vms:
                 print(vm.name)
             print("================")
+            query = input("Search a Network by name (leave blank for all):")
+            nws = get_portgroups(si,query)
+            print("================")
+            for nw in nws:
+                print(nw.name)
+            print("================")
+            choice = input("Select a network (leave blank for all):")
+            nws = get_portgroups(si,choice)
+            new_nw = nws[0]
+            print(new_nw)
+            check = input("Are you sure you want to change the network of these VMs? (y/n)")
+            if check == "y" or check == "Y":
+                for vm in vms:
+                    change_vm_network(vm,new_nw)
 
         case "6":
             query = input("Search a VM by name (leave blank for all):")
