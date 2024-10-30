@@ -1,5 +1,6 @@
 {
     "user":"buggs.bunny-adm@spacejam.local",
     "domain":"spacejam.local",
-    "vcenter_host":"swackhammer.spacejam.local"
+    "vcenter_host":"swackhammer.spacejam.local",
+    "datacenter":"SpaceJam" 
 }

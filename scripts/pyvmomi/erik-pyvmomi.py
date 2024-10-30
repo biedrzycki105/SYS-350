@@ -147,22 +147,32 @@ def print_vm_info(vm):
     print("IP Address:", str(vm.guest.ipAddress))
     print("================")
 
-def create_linked_clone(content,parent_vm,clone_name):
+def create_linked_clone(content,parent_vm,clone_name,dc_name):
+    datacenter = [dc for dc in content.rootFolder.childEntity if dc.name == dc_name][0]
+
+    snapshot_name = "base"
+    snapshot = None
+    for snap in parent_vm.snapshot.rootSnapshotList:
+        if snap.name == snapshot_name:
+            snapshot = snap.snapshot
+            break
+
     clone_spec = vim.vm.CloneSpec()
     clone_spec.location = vim.vm.RelocateSpec()
     clone_spec.location.diskMoveType = vim.vm.RelocateSpec.DiskMoveOptions.createNewChildDiskBacking
     clone_spec.powerOn = False
     clone_spec.template = False
-
-    clone_folder = content.rootFolder
-    task = parent_vm.Clone(folder=clone_folder, name=clone_name, spec=clone_spec)
+    clone_spec.snapshot = snapshot
+    clone_folder = datacenter.vmFolder
     
-    while task.info.state == vim.TaskInfo.State.running:
-        time.sleep(1)
-    if task.info.state == vim.TaskInfo.State.success:
-        print("Task completed successfully.")
-    else:
-        print(f"Task failed: {task.info.error.msg}")
+    parent_vm.Clone(folder=clone_folder, name=clone_name, spec=clone_spec)
+
+def create_snapshot(vms, snapshot_name, description=None, memory=False, quiesce=False):
+    for vm in vms:
+        vm.CreateSnapshot(snapshot_name, description, memory, quiesce)
+
+    
+    
 
 
     
@@ -243,7 +253,8 @@ while True:
                 break
 
         case "4":
-            query = input("Search a VM by name (leave blank for all):")
+            query = input("Search for the VM you want to clone (leave blank for all):")
+            dc_name = settings["datacenter"]
             vms = get_vm(si,query)
             print("================")
             for vm in vms:
@@ -252,7 +263,8 @@ while True:
             check = input("Are you sure you want to change the clone this VM? You can only clone 1 VM at a time (y/n)")
             if len(vms) == 1:
                 clone_name = input("What will you name your new clone?")
-                create_linked_clone(content,vms,clone_name)
+                parent_vm = vms[0]
+                create_linked_clone(content,parent_vm,clone_name,dc_name)
             else:
                 break
 
@@ -285,6 +297,14 @@ while True:
             for vm in vms:
                 print(vm.name)
             print("================")
+            snapshot_name = input("What do you want to call the snapshot? ")
+            description = input("Enter snapshot description: ")
+            memory_choice = input("Capture memory?(y/n) ")
+            if memory_choice == "y" or memory_choice == "Y":
+                memory = True
+            else:
+                memory=False
+            create_snapshot(vms,snapshot_name,description,memory)
 
         case "7":
             print("Exiting...")
